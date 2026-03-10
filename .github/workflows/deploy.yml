@@ -1,1 +1,38 @@
+name: Docker CI/CD
+on:
+  push:
+    branches: [ main ]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
 
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Build Docker image
+      run: docker build -t nodeapp:1.0 .
+
+    - name: Save Docker Image
+      run: docker save nodeapp:1.0 > nodeapp.tar
+    
+    - name: Copy Image to EC2
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_KEY }}
+        source: "nodeapp.tar"
+        target: "/home/ec2-user/"
+
+    - name: Deploy Container
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ec2-user
+        key: ${{ secrets.EC2_KEY }}
+        script: |
+          docker load < nodeapp.tar
+          docker stop nodeapp:1.0 || true
+          docker rm nodeapp:1.0 || true
+          docker run -d -p 80:3000 --name nodeapp:1.0 nodeapp:1.0
